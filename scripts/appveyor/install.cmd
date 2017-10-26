@@ -1,6 +1,6 @@
 @echo off
 
-cmake --build . --target install --config Release -- DESTDIR=C:\projects\pdal\instal
+DESTDIR=C:\projects\pdal\install cmake --build . --target install --config Release
 REM nmake /f Makefile install  DESTDIR=C:\projects\pdal\install
 cd c:\projects\pdal\install\osgeo4w64
 dir 
