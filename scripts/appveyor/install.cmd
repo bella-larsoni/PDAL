@@ -1,7 +1,7 @@
 @echo off
-    
-REM cmake --build . --target install --config Release
-nmake /f Makefile install  DESTDIR=C:\projects\pdal\install
+
+cmake --build . --target install --config Release -- DESTDIR=C:\projects\pdal\instal
+REM nmake /f Makefile install  DESTDIR=C:\projects\pdal\install
 cd c:\projects\pdal\install\osgeo4w64
 dir 
 tar jcvf ..\pdal-%APPVEYOR_REPO_COMMIT%.tar.bz2 .
