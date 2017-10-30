@@ -50,8 +50,18 @@ std::string makeColor()
     // Red is specified.  Green and blue are 0.
     static uint8_t rgb[12] = { 1, 2, 3, 4 };
 
+	char szDataPointer[100] = {};
+
+	snprintf(szDataPointer, sizeof(szDataPointer), "DATAPOINTER=");
+	int beforeLen = strlen(szDataPointer);
+	int numPrinted = CPLPrintPointer(
+		szDataPointer + beforeLen,
+		rgb,
+		static_cast<int>(sizeof(szDataPointer) - beforeLen));
+
+	std::string ptr(szDataPointer, beforeLen + numPrinted);
     std::ostringstream ss;
-    ss << "MEM:::PIXELS=4,LINES=1,BANDS=3,DATATYPE=Byte,DATAPOINTER=" << &rgb;
+    ss << "MEM:::PIXELS=4,LINES=1,BANDS=3,DATATYPE=Byte," << ptr;
     return ss.str();
 }
 
