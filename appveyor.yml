@@ -24,9 +24,9 @@ clone_depth: 5
 #init:
 #  - ps: iex ((new-object net.webclient).DownloadString('https://raw.githubusercontent.com/appveyor/ci/master/scripts/enable-rdp.ps1'))
 
-# on_finish:
-#  - ps: $blockRdp = $true; iex ((new-object net.webclient).DownloadString('https://raw.githubusercontent.com/appveyor/ci/master/scripts/enable-rdp.ps1'))
-  
+on_finish:
+ - ps: $blockRdp = $true; iex ((new-object net.webclient).DownloadString('https://raw.githubusercontent.com/appveyor/ci/master/scripts/enable-rdp.ps1'))
+
 install:
   # make a temp directory for downloading osgeo4w-setup.exe
   # this may not matter as much if part of the install step, as pdal has
@@ -96,4 +96,4 @@ notifications:
     incoming_webhook:
       secure: KxbDvaPmsvNmYpsp0TH3m3hJr7PqQL1sxR8xILBzaF2Lbku03M3mJ/h787TvDGQGX3IlyZtfTP0wvSRqMl4nMmdvDQZoAe8+Gyfc7BOkYIg=
 
- 
+
