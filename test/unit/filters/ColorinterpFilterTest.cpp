@@ -51,7 +51,7 @@ std::string makeColor()
     static uint8_t rgb[12] = { 1, 2, 3, 4 };
 
     std::ostringstream ss;
-    ss << "MEM:::PIXELS=4,LINES=1,BANDS=3,DATAPOINTER=" << &rgb;
+    ss << "MEM:::PIXELS=4,LINES=1,BANDS=3,DATATYPE=Byte,DATAPOINTER=" << &rgb;
     return ss.str();
 }
 
