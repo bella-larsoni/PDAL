@@ -48,9 +48,7 @@ install:
   - call .\\scripts\\appveyor\\config.cmd
 
 build:
-  parallel: true
-  project: PDAL.sln
-  verbosity: minimal
+  - call .\\scripts\\appveyor\\build.cmd
 
 after_build:
   - call %OSGEO4W_ROOT%\bin\o4w_env.bat
