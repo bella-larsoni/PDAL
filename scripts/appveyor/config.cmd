@@ -57,6 +57,7 @@ cmake -G "NMake Makefiles" ^
     -DCMAKE_VERBOSE_MAKEFILE=OFF ^
     -DBUILD_PGPOINTCLOUD_TESTS=OFF ^
     -DBUILD_SQLITE_TESTS=OFF ^
+    -DCMAKE_BUILD_TYPE=RelWithDebInfo ^
     -DBUILD_OCI_TESTS=OFF ^
     .
 
