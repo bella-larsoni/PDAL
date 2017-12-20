@@ -40,29 +40,6 @@
 namespace pdal
 {
 
-Polygon::Polygon()
-    : Geometry ()
-{
-}
-
-
-Polygon::Polygon(const std::string& wkt_or_json, SpatialReference ref)
-    : Geometry(wkt_or_json, ref)
-{
-}
-
-
-Polygon::~Polygon()
-{
-}
-
-
-Polygon::Polygon(const Polygon& input)
-    : Geometry(input)
-{
-}
-
-
 Polygon& Polygon::operator=(const Polygon& input)
 {
 
@@ -79,11 +56,6 @@ Polygon& Polygon::operator=(const Polygon& input)
     return *this;
 }
 
-
-Polygon::Polygon(GEOSGeometry* g, const SpatialReference& srs)
-    : Geometry(g, srs)
-{
-}
 
 
 Polygon::Polygon(OGRGeometryH g, const SpatialReference& srs) : Geometry(g, srs)
@@ -321,4 +293,40 @@ bool Polygon::crosses(const Polygon& p) const
     return (bool) GEOSCrosses_r(m_geoserr.ctx(), m_geom.get(), p.m_geom.get());
 }
 
+std::vector<Polygon> Polygon::polygons() const
+{
+    std::vector<Polygon> polys;
+    int numPolys = GEOSGetNumGeometries_r(m_geoserr.ctx(), m_geom.get());
+    for (int i = 0; i < numPolys; ++i)
+    {
+        const GEOSGeometry* constGeom = GEOSGetGeometryN_r(m_geoserr.ctx(),
+            m_geom.get(), i);
+        GEOSGeometry *geom = GEOSGeom_clone_r(m_geoserr.ctx(), constGeom);
+        polys.push_back(Polygon(geom, m_srs));
+    }
+    return polys;
+}
+
+Polygon::Ring Polygon::exteriorRing() const
+{
+    Ring r;
+
+    if (GEOSGeomTypeId_r(m_geoserr.ctx(), m_geom.get()) != GEOS_POLYGON)
+        throw pdal_error("Request for exterior ring on non-polygon.");
+    const GEOSGeometry *ring = GEOSGetExteriorRing_r(
+        m_geoserr.ctx(), m_geom.get());
+    const GEOSCoordSequence *coords = GEOSGeom_getCoordSeq_r(
+        m_geoserr.ctx(), ring);
+    unsigned size;
+    GEOSCoordSeq_getSize_r(m_geoserr.ctx(), coords, &size);
+    for (unsigned i = 0; i < size; ++i)
+    {
+        double x, y;
+
+        GEOSCoordSeq_getX_r(m_geoserr.ctx(), coords, i, &x);
+        GEOSCoordSeq_getY_r(m_geoserr.ctx(), coords, i, &y);
+        r.push_back({x, y});
+    }
+    return r;
+}
 } // namespace geos

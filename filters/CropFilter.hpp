@@ -34,11 +34,14 @@
 
 #pragma once
 
+#include <list>
+
 #include <pdal/Filter.hpp>
 #include <pdal/Polygon.hpp>
 #include <pdal/plugin.hpp>
 
 #include "private/Point.hpp"
+#include "private/pnp/GridPnp.hpp"
 
 extern "C" int32_t CropFilter_ExitFunc();
 extern "C" PF_ExitFunc CropFilter_InitPlugin();
@@ -47,6 +50,7 @@ namespace pdal
 {
 
 class ProgramArgs;
+class GridPnp;
 
 // removes any points outside of the given range
 // updates the header accordingly
@@ -60,6 +64,17 @@ public:
     std::string getName() const;
 
 private:
+    struct ViewGeom
+    {
+        ViewGeom(const Polygon& poly) : m_poly(poly)
+        {}
+        ViewGeom(ViewGeom&& vg) : m_poly(std::move(vg.m_poly)),
+            m_gridPnps(std::move(vg.m_gridPnps))
+        {}
+
+        Polygon m_poly;
+        std::vector<GridPnp> m_gridPnps;
+    };
     std::vector<Bounds> m_bounds;
     bool m_cropOutside;
     std::vector<Polygon> m_polys;
@@ -67,19 +82,20 @@ private:
     double m_distance;
     double m_distance2;
     std::vector<filter::Point> m_centers;
-    std::vector<Polygon> m_geoms;
+    std::vector<ViewGeom> m_geoms;
     std::vector<BOX2D> m_boxes;
 
     void addArgs(ProgramArgs& args);
     virtual void initialize();
+
     virtual void ready(PointTableRef table);
     virtual void spatialReferenceChanged(const SpatialReference& srs);
     virtual bool processOne(PointRef& point);
     virtual PointViewSet run(PointViewPtr view);
     bool crop(const PointRef& point, const BOX2D& box);
     void crop(const BOX2D& box, PointView& input, PointView& output);
-    bool crop(const PointRef& point, const Polygon& g);
-    void crop(const Polygon& g, PointView& input, PointView& output);
+    bool crop(const PointRef& point, GridPnp& g);
+    void crop(const ViewGeom& g, PointView& input, PointView& output);
     bool crop(const PointRef& point, const filter::Point& center);
     void crop(const filter::Point& center, PointView& input,
         PointView& output);
