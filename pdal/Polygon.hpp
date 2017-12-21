@@ -85,6 +85,7 @@ public:
     bool within(const Polygon& p) const;
     bool crosses(const Polygon& p) const;
     Ring exteriorRing() const;
+    std::vector<Ring> interiorRings() const;
 
 private:
     void initializeFromBounds(const BOX3D& b);

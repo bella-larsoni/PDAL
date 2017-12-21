@@ -311,22 +311,57 @@ Polygon::Ring Polygon::exteriorRing() const
 {
     Ring r;
 
-    if (GEOSGeomTypeId_r(m_geoserr.ctx(), m_geom.get()) != GEOS_POLYGON)
+    const GEOSGeometry *geom(m_geom.get());
+    GEOSContextHandle_t ctx(m_geoserr.ctx());
+
+    if (GEOSGeomTypeId_r(ctx, geom) != GEOS_POLYGON)
         throw pdal_error("Request for exterior ring on non-polygon.");
-    const GEOSGeometry *ring = GEOSGetExteriorRing_r(
-        m_geoserr.ctx(), m_geom.get());
-    const GEOSCoordSequence *coords = GEOSGeom_getCoordSeq_r(
-        m_geoserr.ctx(), ring);
+    const GEOSGeometry *ring = GEOSGetExteriorRing_r(ctx, geom);
+    const GEOSCoordSequence *coords = GEOSGeom_getCoordSeq_r(ctx, ring);
+
     unsigned size;
-    GEOSCoordSeq_getSize_r(m_geoserr.ctx(), coords, &size);
+    GEOSCoordSeq_getSize_r(ctx, coords, &size);
     for (unsigned i = 0; i < size; ++i)
     {
         double x, y;
 
-        GEOSCoordSeq_getX_r(m_geoserr.ctx(), coords, i, &x);
-        GEOSCoordSeq_getY_r(m_geoserr.ctx(), coords, i, &y);
+        GEOSCoordSeq_getX_r(ctx, coords, i, &x);
+        GEOSCoordSeq_getY_r(ctx, coords, i, &y);
         r.push_back({x, y});
     }
     return r;
 }
+
+std::vector<Polygon::Ring> Polygon::interiorRings() const
+{
+    std::vector<Polygon::Ring> rings;
+
+    const GEOSGeometry *geom(m_geom.get());
+    GEOSContextHandle_t ctx(m_geoserr.ctx());
+
+    if (GEOSGeomTypeId_r(ctx, geom) != GEOS_POLYGON)
+        throw pdal_error("Request for exterior ring on non-polygon.");
+    int numRings = GEOSGetNumInteriorRings_r(ctx, geom);
+
+    for (int n = 0; n < numRings; ++n)
+    {
+        const GEOSGeometry *ring = GEOSGetInteriorRingN_r(ctx, geom, n);
+        const GEOSCoordSequence *coords = GEOSGeom_getCoordSeq_r(ctx, ring);
+
+        unsigned size;
+        GEOSCoordSeq_getSize_r(ctx, coords, &size);
+        Ring r;
+        for (unsigned i = 0; i < size; ++i)
+        {
+            double x, y;
+
+            GEOSCoordSeq_getX_r(ctx, coords, i, &x);
+            GEOSCoordSeq_getY_r(ctx, coords, i, &y);
+            r.push_back({x, y});
+        }
+        rings.push_back(r);
+    }
+    return rings;
+}
+
 } // namespace geos

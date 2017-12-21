@@ -160,7 +160,7 @@ void CropFilter::transform(const SpatialReference& srs)
         geom.m_gridPnps.clear();
         std::vector<Polygon> polys = geom.m_poly.polygons();
         for (auto& p : polys)
-            geom.m_gridPnps.emplace_back(p.exteriorRing());
+            geom.m_gridPnps.emplace_back(p.exteriorRing(), p.interiorRings());
     }
 
     // If we don't have any SRS, do nothing.
