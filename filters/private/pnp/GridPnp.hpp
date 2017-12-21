@@ -17,45 +17,41 @@ struct grid_error : public std::runtime_error
     {}
 };
 
+
 class GridPnp
 {
 public:
     using Point = std::pair<double, double>;
+    using Ring = std::vector<Point>;
 
     // Initialize the point-in-poly engine by creating an overlay grid and
     // attaching the index of each polygon edge to any cell it passes
     // through.
-    GridPnp(const std::vector<Point>& poly)
+    // NOTE: This code does only minimal validation to try to make sure
+    //  that is won't hang.  Make sure your polygon is valid before
+    //  calling.  Make sure there are no self-intersections, for example.
+    GridPnp(const Ring& outer, const std::vector<Ring>& inners)
     {
-        if (poly.size() < 4)
-            throw grid_error("Invalid polygon: too few points.");
-        if (poly[0] != poly[poly.size() - 1])
-            throw grid_error("Polygon not closed.");
+        validateRing(outer);
+        for (const Ring& inner : inners)
+            validateRing(inner);
 
-        m_poly.push_back(poly[0]);
-        for (size_t i = 1; i < poly.size(); ++i)
-        {
-            const Point& p1 = poly[i];
-            const Point& p2 = m_poly.back();
+        calcBounds(outer);
 
-            if (Comparison::closeEnough(p1.first, p2.first) &&
-                Comparison::closeEnough(p1.second, p2.second))
-                continue;
-            m_poly.push_back(p1);
-        }
-        if (m_poly.size() < 4)
-            throw grid_error("Invalid polygon: too few points after "
-                "culling consecutive duplicates.");
-
-        // Also calculates the average edge length.
-        double xAvgLen;
-        double yAvgLen;
-        calcBounds(xAvgLen, yAvgLen);
-        XYIndex gridSize = calcGridSize(xAvgLen, yAvgLen);
-        createGrid(gridSize);
-        assignEdges();
+        fillRingList(outer, inners);
+        setupGrid();
     }
 
+
+    GridPnp(const Ring& outer)
+    {
+        validateRing(outer);
+        calcBounds(outer);
+
+        std::vector<Ring> inners;  // no outers.
+        fillRingList(outer, inners);
+        setupGrid();
+    }
 
     bool inside(const Point& p)
     { return inside(p.first, p.second); }
@@ -85,6 +81,8 @@ public:
 private:
     using XYIndex = std::pair<size_t, size_t>;
     using Edge = std::pair<Point, Point>;
+    using RingList = Ring; // Structure is the same.
+    using EdgeId = size_t;
 
     enum class IntersectType
     {
@@ -124,56 +122,138 @@ private:
         GridPnp::Point m_point;
     };
 
-    Point pointFromId(size_t id)
-        { return Point{ m_poly[id].first, m_poly[id].second }; }
-    Edge edgeFromId(size_t id)
-        { return Edge {pointFromId(id), pointFromId(id + 1)}; }
+    class EdgeIt
+    {
+    public:
+        EdgeIt(const RingList& r) : m_points(r), m_id(0)
+        { skipInvalid(); }
+
+        void next()
+        {
+            m_id++;
+            skipInvalid();
+        }
+
+        EdgeId operator * () const
+        { return m_id; }
+
+        operator bool () const
+        { return m_id < m_points.size() - 1; }
+
+    private:
+        void skipInvalid()
+        {
+            while (m_id < m_points.size() - 1 &&
+                (std::isnan(m_points[m_id].first) ||
+                 std::isnan(m_points[m_id + 1].first) ||
+                 (m_points[m_id] == m_points[m_id + 1])))
+            {
+                m_id++;
+            }
+        }
+
+        const RingList& m_points;
+        size_t m_id;
+    };
+
+
+    Point& point1(EdgeId id)
+        { return m_rings[id]; }
+    Point& point2(EdgeId id)
+        { return m_rings[id + 1]; }
     double xval(const Point& p)
         { return p.first; }
     double yval(const Point& p)
         { return p.second; }
-    size_t numEdges()
-        { return m_poly.size() - 1; }
+
+    void validateRing(const Ring& r)
+    {
+        if (r.size() < 4)
+            throw grid_error("Invalid ring. Ring must consist of at least "
+                " four points.");
+        if (r[0] != r[r.size() - 1])
+            throw grid_error("Invalid ring. First point is not equal to "
+                "the last point.");
+    }
 
     // Calculate the bounding box of the polygon.  At the same time
     // calculate the average length of the X and Y components of the
     // polygon edges.
-    void calcBounds(double& xAvgLen, double& yAvgLen)
+    void calcBounds(const Ring& outer)
     {
-        double xdist{0};
-        double ydist{0};
-
         // Inialize max/min with X/Y of first point.
-        Point p = pointFromId(0);
+        const Point& p = outer[0];
         m_xMin = xval(p);
         m_xMax = xval(p);
         m_yMin = yval(p);
         m_yMax = yval(p);
 
+        size_t numEdges = 0;
         // The first point is duplicated as the last, so we skip the last
         // point when looping.
-        for (size_t id = 0; id < numEdges(); ++id)
+        for (size_t id = 0; id < outer.size() - 1; ++id)
         {
-            Edge e = edgeFromId(id);
-            Point& p1 = e.first;
-            Point& p2 = e.second;
+            const Point& p1 = outer[id];
+            const Point& p2 = outer[id + 1];
 
             // Calculate bounding box.
             m_xMin = std::min(m_xMin, xval(p1));
             m_xMax = std::max(m_xMax, xval(p1));
             m_yMin = std::min(m_yMin, yval(p1));
             m_yMax = std::max(m_yMax, yval(p1));
+        }
+    }
+
+
+    void fillRingList(const Ring& inner, const std::vector<Ring>& outers)
+    {
+        double nan = std::numeric_limits<double>::quiet_NaN();
+
+        for (size_t i = 0; i < inner.size(); ++i)
+            m_rings.push_back(inner[i]);
+        for (const Ring& r : outers)
+        {
+            // Nan is a separator between rings.
+            m_rings.push_back({nan, nan});
+            for (size_t i = 0; i < r.size(); ++i)
+                m_rings.push_back(r[i]);
+        }
+    }
+
+
+    void setupGrid()
+    {
+        double xAvgLen;
+        double yAvgLen;
+
+        calcAvgEdgeLen(xAvgLen, yAvgLen);
+        XYIndex gridSize = calcGridSize(xAvgLen, yAvgLen);
+        createGrid(gridSize);
+        assignEdges();
+    }
+
+
+    void calcAvgEdgeLen(double& xAvgLen, double& yAvgLen)
+    {
+        double xdist{0};
+        double ydist{0};
+        size_t numEdges{0};
+        for (EdgeIt it(m_rings); it; it.next())
+        {
+            EdgeId id = *it;
+            const Point& p1 = point1(*it);
+            const Point& p2 = point2(*it);
 
             // Sum the lengths of the X and Y components of the edges.
             xdist += std::abs(xval(p2) - xval(p1));
             ydist += std::abs(yval(p2) - yval(p1));
+            numEdges++;
         }
 
         // Find the average X and Y component length.
-        xAvgLen = xdist / numEdges();
-        yAvgLen = ydist / numEdges();
+        xAvgLen = xdist / numEdges;
+        yAvgLen = ydist / numEdges;
     }
-
 
     // The paper calculates an X and Y based on a) the number of edges
     // and b) the relative length of edges in the X and Y direction.
@@ -190,7 +270,9 @@ private:
     XYIndex calcGridSize(double xAvgLen, double yAvgLen)
     {
         // I'm setting a minmum number of cells as 1000, because, why not?
-        size_t m = std::max(1000UL, m_poly.size());
+        // m_rings isn't necessarily an exact count of edges, but it's close
+        // enough for this purpose.
+        size_t m = std::max(1000UL, m_rings.size());
 
         // See paper for this calc.
         double scalex = ((m_xMax - m_xMin) * yAvgLen) /
@@ -228,11 +310,11 @@ private:
     // Loop through edges.  Add the edge to each cell traversed.
     void assignEdges()
     {
-        for (size_t id = 0; id < numEdges(); ++id)
+        for (EdgeIt it(m_rings); it; it.next())
         {
-            Edge e = edgeFromId(id);
-            Point& p1 = e.first;
-            Point& p2 = e.second;
+            EdgeId id = *it;
+            Point& p1 = point1(id);
+            Point& p2 = point2(id);
             Point origin = m_grid->origin();
             VoxelRayTrace vrt(m_grid->cellWidth(), m_grid->cellHeight(),
                 xval(origin), yval(origin),
@@ -245,10 +327,10 @@ private:
 
 
     // Determine if a point is collinear with an edge.
-    bool pointCollinear(double x, double y, Edge edge)
+    bool pointCollinear(double x, double y, EdgeId edgeId)
     {
-        Point p1 = edge.first;
-        Point p2 = edge.second;
+        Point& p1 = point1(edgeId);
+        Point& p2 = point2(edgeId);
         double x1 = xval(p1);
         double x2 = xval(p2);
         double y1 = yval(p1);
@@ -283,8 +365,8 @@ private:
         // in the cell.
         auto validTestPoint = [this](double x, double y, Cell& cell)
         {
-            for (auto edge : cell.edges())
-                if (pointCollinear(x, y, edgeFromId(edge)))
+            for (auto edgeId : cell.edges())
+                if (pointCollinear(x, y, edgeId))
                     return false;
             return true;
         };
@@ -356,7 +438,7 @@ private:
         size_t isect = 0;
         for (auto& edgeId : edges)
         {
-            Edge e2 = edgeFromId(edgeId);
+            Edge e2{ point1(edgeId), point2(edgeId) };
             if (intersects(e1, e2) != IntersectType::None)
                 isect++;
         }
@@ -374,7 +456,7 @@ private:
         bool inside = cell.inside();
         for (auto edgeIdx: cell.edges())
         {
-            Edge other = edgeFromId(edgeIdx);
+            Edge other{ point1(edgeIdx), point2(edgeIdx) };
             IntersectType intersection = intersects(tester, other);
             if (intersection == IntersectType::On)
                 return true;
@@ -429,7 +511,7 @@ private:
         return IntersectType::None;
     }
 
-    std::vector<Point> m_poly;
+    RingList m_rings;
     std::mt19937 m_ranGen;
     std::unique_ptr<std::uniform_real_distribution<>> m_xDistribution;
     std::unique_ptr<std::uniform_real_distribution<>> m_yDistribution;
