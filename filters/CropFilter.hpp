@@ -41,7 +41,6 @@
 #include <pdal/plugin.hpp>
 
 #include "private/Point.hpp"
-#include "private/pnp/GridPnp.hpp"
 
 extern "C" int32_t CropFilter_ExitFunc();
 extern "C" PF_ExitFunc CropFilter_InitPlugin();
@@ -64,16 +63,15 @@ public:
     std::string getName() const;
 
 private:
+    // This is just a way to marry a (multi)polygon with a list of its
+    // GridPnp's that do the actual point-in-polygon operation.
     struct ViewGeom
     {
-        ViewGeom(const Polygon& poly) : m_poly(poly)
-        {}
-        ViewGeom(ViewGeom&& vg) : m_poly(std::move(vg.m_poly)),
-            m_gridPnps(std::move(vg.m_gridPnps))
-        {}
+        ViewGeom(const Polygon& poly);
+        ViewGeom(ViewGeom&& vg);
 
         Polygon m_poly;
-        std::vector<GridPnp> m_gridPnps;
+        std::vector<std::unique_ptr<GridPnp>> m_gridPnps;
     };
     std::vector<Bounds> m_bounds;
     bool m_cropOutside;

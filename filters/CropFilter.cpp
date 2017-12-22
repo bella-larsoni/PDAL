@@ -42,6 +42,7 @@
 #include <pdal/util/ProgramArgs.hpp>
 
 #include "private/Point.hpp"
+#include "private/pnp/GridPnp.hpp"
 
 #include <sstream>
 #include <cstdarg>
@@ -55,6 +56,13 @@ static PluginInfo const s_info = PluginInfo(
     "http://pdal.io/stages/filters.crop.html" );
 
 CREATE_STATIC_PLUGIN(1, 0, CropFilter, Filter, s_info)
+
+CropFilter::ViewGeom::ViewGeom(const Polygon& poly) : m_poly(poly)
+{}
+
+CropFilter::ViewGeom::ViewGeom(ViewGeom&& vg) :
+    m_poly(std::move(vg.m_poly)), m_gridPnps(std::move(vg.m_gridPnps))
+{}
 
 std::string CropFilter::getName() const { return s_info.name; }
 
@@ -124,7 +132,7 @@ bool CropFilter::processOne(PointRef& point)
 {
     for (auto& g : m_geoms)
         for (auto& gridPnp : g.m_gridPnps)
-            if (!crop(point, gridPnp))
+            if (!crop(point, *gridPnp))
                 return false;
 
     for (auto& box : m_boxes)
@@ -160,7 +168,11 @@ void CropFilter::transform(const SpatialReference& srs)
         geom.m_gridPnps.clear();
         std::vector<Polygon> polys = geom.m_poly.polygons();
         for (auto& p : polys)
-            geom.m_gridPnps.emplace_back(p.exteriorRing(), p.interiorRings());
+        {
+            std::unique_ptr<GridPnp> gridPnp(new GridPnp(
+                p.exteriorRing(), p.interiorRings()));
+            geom.m_gridPnps.push_back(std::move(gridPnp));
+        }
     }
 
     // If we don't have any SRS, do nothing.
@@ -255,7 +267,7 @@ void CropFilter::crop(const ViewGeom& g, PointView& input, PointView& output)
         for (PointId idx = 0; idx < input.size(); ++idx)
         {
             point.setPointId(idx);
-            if (crop(point, const_cast<GridPnp&>(gridPnp)))
+            if (crop(point, const_cast<GridPnp&>(*gridPnp)))
                 output.appendPoint(input, idx);
         }
     }
